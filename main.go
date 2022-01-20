@@ -65,9 +65,16 @@ func GenerateGithubRelease(releaseTag string, changeLog string) error {
 
 func generateMarkdownChangelog(fromTag string, untilTag string) (string, error) {
 	git := gitlog.New(&gitlog.Config{})
-	commits, err := git.Log(&gitlog.Rev{
-		Ref: fromTag,
-	}, nil)
+	var commits []*gitlog.Commit
+	var err error
+	if fromTag == "" {
+		commits, err = git.Log(nil, nil)
+	} else {
+		commits, err = git.Log(&gitlog.Rev{
+			Ref: fromTag,
+		}, nil)
+	}
+
 	if err != nil {
 		return "", err
 	}
@@ -102,7 +109,7 @@ func validateVersion(version string) error {
 func deployNewVersion(nextVersion string, buildName string) error {
 	l := kemba.New("deloy")
 
-	l.Printf("Starting deployment %s for %s", nextVersion, nextVersion)
+	l.Printf("Starting deployment %s for %s", nextVersion, buildName)
 
 	// Check if repo is clean
 	l.Println("Checking if repo is clean")
@@ -162,7 +169,7 @@ func deployNewVersion(nextVersion string, buildName string) error {
 	nextReleaseTag := next.String()
 
 	// generate changelog
-	l.Println("Generating markdown")
+	l.Printf("Generating markdown - fromTag: %s untilTag: %s", latest.String(), nextReleaseTag)
 	chglog, err := generateMarkdownChangelog(latest.String(), nextReleaseTag)
 	if err != nil {
 		return err
