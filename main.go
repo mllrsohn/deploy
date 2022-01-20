@@ -39,6 +39,15 @@ func RepoIsMasterOrMain() (bool, error) {
 	return false, nil
 }
 
+func GetLastCommit() (string, error) {
+	res, err := exec.Command("git", "rev-parse", "HEAD").Output()
+	if err != nil {
+		return "", err
+	}
+	commitName := strings.Trim(string(res), "\n")
+	return commitName, nil
+}
+
 func RepoFetchTags() error {
 	_, err := exec.Command("git", "fetch", "--tags", "--force").Output()
 	return err
@@ -59,7 +68,7 @@ func RepoCreateTag(tagName string) error {
 }
 
 func GenerateGithubRelease(releaseTag string, changeLog string) error {
-	_, err := exec.Command("gh", "release", "create", releaseTag, "--notes", changeLog).Output()
+	_, err := exec.Command("gh", "release", "create", releaseTag, "--notes", changeLog, "-t", releaseTag).Output()
 	return err
 }
 
@@ -70,9 +79,17 @@ func generateMarkdownChangelog(fromTag string, untilTag string) (string, error) 
 	if fromTag == "" {
 		commits, err = git.Log(nil, nil)
 	} else {
-		commits, err = git.Log(&gitlog.Rev{
-			Ref: fromTag,
+		lastCommit, err := GetLastCommit()
+		if err != nil {
+			return "", err
+		}
+		commits, err = git.Log(&gitlog.RevRange{
+			Old: fromTag,
+			New: lastCommit,
 		}, nil)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	if err != nil {
