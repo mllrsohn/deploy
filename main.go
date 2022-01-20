@@ -104,7 +104,7 @@ func deployNewVersion(nextVersion string, buildName string) error {
 	if err != nil {
 		return err
 	}
-	if isClean {
+	if !isClean {
 		return errors.New("Please make sure there are no changes")
 	}
 	// Check if we are on master
