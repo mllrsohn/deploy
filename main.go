@@ -13,6 +13,7 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	markdown "github.com/MichaelMure/go-term-markdown"
+	"github.com/clok/kemba"
 	semv "github.com/linyows/git-semv"
 	"github.com/tsuyoshiwada/go-gitlog"
 	cli "github.com/urfave/cli/v2"
@@ -99,7 +100,12 @@ func validateVersion(version string) error {
 }
 
 func deployNewVersion(nextVersion string, buildName string) error {
+	l := kemba.New("deloy")
+
+	l.Printf("Starting deployment %s for %s", nextVersion, nextVersion)
+
 	// Check if repo is clean
+	l.Println("Checking if repo is clean")
 	isClean, err := RepoIsClean()
 	if err != nil {
 		return err
@@ -107,7 +113,10 @@ func deployNewVersion(nextVersion string, buildName string) error {
 	if !isClean {
 		return errors.New("Please make sure there are no changes")
 	}
+	l.Println("Repo is clean")
+
 	// Check if we are on master
+	l.Println("Check if repo is master or main")
 	isMasterOrMain, err := RepoIsMasterOrMain()
 	if err != nil {
 		return err
@@ -117,12 +126,14 @@ func deployNewVersion(nextVersion string, buildName string) error {
 	}
 
 	// Fetch latest remote tags
+	l.Println("Fetching Tags")
 	err = RepoFetchTags()
 	if err != nil {
 		return err
 	}
 
 	// Get the latest Tag
+	l.Println("Getting Latest Tag")
 	latest, err := semv.Latest()
 	if err != nil {
 		return err
@@ -132,6 +143,7 @@ func deployNewVersion(nextVersion string, buildName string) error {
 		_, _ = latest.Build(buildName)
 		// we need to check if the latest with build tag exists
 		// if not fall back to the latest that does
+		l.Println("Checking of last tag exists")
 		err := CheckIfTagExists(latest.String())
 		if err != nil {
 			latest, err = semv.Latest()
@@ -150,6 +162,7 @@ func deployNewVersion(nextVersion string, buildName string) error {
 	nextReleaseTag := next.String()
 
 	// generate changelog
+	l.Println("Generating markdown")
 	chglog, err := generateMarkdownChangelog(latest.String(), nextReleaseTag)
 	if err != nil {
 		return err
@@ -171,15 +184,19 @@ func deployNewVersion(nextVersion string, buildName string) error {
 	if !deploy {
 		return nil
 	}
-
+	l.Println("Generating and pushing tag")
 	err = RepoCreateTag(nextReleaseTag)
 	if err != nil {
 		return err
 	}
+	l.Println("Generating github release")
 	err = GenerateGithubRelease(nextReleaseTag, chglog)
 	if err != nil {
 		return err
 	}
+
+	l.Println("done deploying")
+
 	return nil
 }
 
