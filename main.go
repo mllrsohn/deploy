@@ -123,7 +123,7 @@ func validateVersion(version string) error {
 	return err
 }
 
-func deployNewVersion(nextVersion string, buildName string) error {
+func deployNewVersion(nextVersion string, buildName string, allowAllBranches bool) error {
 	l := kemba.New("deloy")
 
 	l.Printf("Starting deployment %s for %s", nextVersion, buildName)
@@ -145,7 +145,7 @@ func deployNewVersion(nextVersion string, buildName string) error {
 	if err != nil {
 		return err
 	}
-	if !isMasterOrMain {
+	if !isMasterOrMain && !allowAllBranches {
 		return errors.New("Releases are allowed to tag from master/main branch")
 	}
 
@@ -244,6 +244,7 @@ func init() {
 func main() {
 	var buildName string
 	var version string
+	var allowAllBranches bool
 	app := &cli.App{
 		Usage:     "a monorepo deploy helper",
 		UsageText: "deploy --version minor --name myservice",
@@ -267,13 +268,19 @@ func main() {
 				Usage:       "Optional: Service prefix for the tag",
 				Destination: &buildName,
 			},
+			&cli.BoolFlag{
+				Name:        "allow-all",
+				Usage:       "Allows releasing from other branches than main/master",
+				Value:       false,
+				Destination: &allowAllBranches,
+			},
 		},
 		Action: func(c *cli.Context) error {
 			err := validateVersion(version)
 			if err != nil {
 				return err
 			}
-			return deployNewVersion(version, buildName)
+			return deployNewVersion(version, buildName, allowAllBranches)
 		},
 	}
 
