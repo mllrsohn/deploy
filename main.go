@@ -20,7 +20,7 @@ import (
 )
 
 func RepoIsClean() (bool, error) {
-	res, err := exec.Command("git", "status", "-s").Output()
+	res, err := exec.Command("git", "status", "-s", "-uno").Output()
 	if err != nil {
 		return false, err
 	}
