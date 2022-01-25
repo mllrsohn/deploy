@@ -13,8 +13,8 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	markdown "github.com/MichaelMure/go-term-markdown"
+	"github.com/blang/semver"
 	"github.com/clok/kemba"
-	semv "github.com/linyows/git-semv"
 	"github.com/tsuyoshiwada/go-gitlog"
 	cli "github.com/urfave/cli/v2"
 )
@@ -51,6 +51,57 @@ func GetLastCommit() (string, error) {
 func RepoFetchTags() error {
 	_, err := exec.Command("git", "fetch", "--tags", "--force").Output()
 	return err
+}
+
+func ContainsBuildName(buildName string, version semver.Version) bool {
+	for _, v := range version.Build {
+		if v == buildName {
+			return true
+		}
+	}
+
+	return false
+}
+
+func GetCurrentTag(buildName string) (*semver.Version, error) {
+	resp, err := exec.Command("git", "tag", "-l").Output()
+	if err != nil {
+		return nil, err
+	}
+
+	tagsWithoutSuffix := strings.TrimSuffix(string(resp), "\n")
+	rawTags := strings.Split(tagsWithoutSuffix, "\n")
+	var tags []semver.Version
+	for _, tag := range rawTags {
+		tag = strings.TrimPrefix(tag, "v")
+		v, err := semver.Parse(tag)
+		if err == nil {
+			if buildName == "" && len(v.Build) == 0 {
+				tags = append(tags, v)
+			} else {
+				if ContainsBuildName(buildName, v) {
+					tags = append(tags, v)
+				}
+			}
+		}
+	}
+
+	if len(tags) == 0 {
+		return getEmpyVersion(buildName), nil
+	}
+
+	semver.Sort(tags)
+
+	lastTag := tags[len(tags)-1]
+	return &lastTag, nil
+}
+
+func getEmpyVersion(buildName string) *semver.Version {
+	var build []string
+	if buildName != "" {
+		build = append(build, buildName)
+	}
+	return &semver.Version{Major: 0, Minor: 0, Patch: 0, Build: build}
 }
 
 func CheckIfTagExists(tagName string) error {
@@ -158,36 +209,52 @@ func deployNewVersion(nextVersion string, buildName string, allowAllBranches boo
 
 	// Get the latest Tag
 	l.Println("Getting Latest Tag")
-	latest, err := semv.Latest()
+
+	// Get All Tags
+	currentTag, err := GetCurrentTag(buildName)
 	if err != nil {
 		return err
 	}
-	// add the build name to the Tag
-	if buildName != "" {
-		_, _ = latest.Build(buildName)
-		// we need to check if the latest with build tag exists
-		// if not fall back to the latest that does
-		l.Println("Checking of last tag exists")
-		err := CheckIfTagExists(latest.String())
-		if err != nil {
-			latest, err = semv.Latest()
-			if err != nil {
-				return err
-			}
-		}
+
+	l.Printf("Last current Tag %s", currentTag.String())
+
+	// currentTag.Minor
+	nextTag := getEmpyVersion(buildName)
+	if nextVersion == "patch" {
+		nextTag.Major = currentTag.Major
+		nextTag.Minor = currentTag.Minor
+		nextTag.Patch = currentTag.Patch + 1
 	}
 
-	// Get the next Tag
-	next := latest.Next(nextVersion)
-	if buildName != "" {
-		_, _ = next.Build(buildName)
+	if nextVersion == "minor" {
+		nextTag.Major = currentTag.Major
+		nextTag.Minor = currentTag.Minor + 1
+		nextTag.Patch = 0
 	}
 
-	nextReleaseTag := next.String()
+	if nextVersion == "major" {
+		nextTag.Major = currentTag.Major + 1
+		nextTag.Minor = 0
+		nextTag.Patch = 0
+	}
+
+	l.Printf("Next Tag %s", nextTag.String())
+
+	l.Println("Checking of last tag exists")
+
+	currentReleaseTag := currentTag.String()
+	nextReleaseTag := nextTag.String()
+
+	err = CheckIfTagExists(currentReleaseTag)
+	if err != nil {
+		// we null the tag so we can generate release notes
+		currentReleaseTag = ""
+	}
 
 	// generate changelog
-	l.Printf("Generating markdown - fromTag: %s untilTag: %s", latest.String(), nextReleaseTag)
-	chglog, err := generateMarkdownChangelog(latest.String(), nextReleaseTag)
+	l.Printf("Generating markdown - fromTag: %s untilTag: %s", currentReleaseTag, nextReleaseTag)
+
+	chglog, err := generateMarkdownChangelog(currentReleaseTag, nextReleaseTag)
 	if err != nil {
 		return err
 	}
