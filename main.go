@@ -174,21 +174,23 @@ func validateVersion(version string) error {
 	return err
 }
 
-func deployNewVersion(nextVersion string, buildName string, allowAllBranches bool) error {
+func deployNewVersion(nextVersion string, buildName string, allowAllBranches bool, allowDirty bool) error {
 	l := kemba.New("deloy")
 
 	l.Printf("Starting deployment %s for %s", nextVersion, buildName)
 
-	// Check if repo is clean
-	l.Println("Checking if repo is clean")
-	isClean, err := RepoIsClean()
-	if err != nil {
-		return err
+	if !allowDirty {
+		// Check if repo is clean
+		l.Println("Checking if repo is clean")
+		isClean, err := RepoIsClean()
+		if err != nil {
+			return err
+		}
+		if !isClean {
+			return errors.New("Please make sure there are no changes")
+		}
+		l.Println("Repo is clean")
 	}
-	if !isClean {
-		return errors.New("Please make sure there are no changes")
-	}
-	l.Println("Repo is clean")
 
 	// Check if we are on master
 	l.Println("Check if repo is master or main")
@@ -312,6 +314,7 @@ func main() {
 	var buildName string
 	var version string
 	var allowAllBranches bool
+	var allowDirty bool
 	app := &cli.App{
 		Usage:     "a monorepo deploy helper",
 		UsageText: "deploy --version minor --name myservice",
@@ -341,13 +344,19 @@ func main() {
 				Value:       false,
 				Destination: &allowAllBranches,
 			},
+			&cli.BoolFlag{
+				Name:        "allow-dirty",
+				Usage:       "Allows releasing from a dirty repo",
+				Value:       false,
+				Destination: &allowDirty,
+			},
 		},
 		Action: func(c *cli.Context) error {
 			err := validateVersion(version)
 			if err != nil {
 				return err
 			}
-			return deployNewVersion(version, buildName, allowAllBranches)
+			return deployNewVersion(version, buildName, allowAllBranches, allowDirty)
 		},
 	}
 
